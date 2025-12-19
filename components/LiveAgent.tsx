@@ -413,4 +413,86 @@ const LiveAgent: React.FC<LiveAgentProps> = ({ persona, onPersonaChange, metrics
                     >
                       <StreamingText text={item.text} isComplete={item.isComplete} role={item.role} />
                     </div>
-                    
+                    <div className="mt-1.5 px-2 text-[8px] text-gray-300 font-mono flex items-center gap-1.5">
+                      <svg className="w-2 h-2 opacity-50" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
+                      {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes ping-slow {
+          0% { transform: scale(1); opacity: 0.3; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+        .animate-ping-slow {
+          animation: ping-slow 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        @keyframes pulse-fast {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+        }
+        .animate-pulse-fast {
+          animation: pulse-fast 0.8s ease-in-out infinite;
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
+        }
+        .animate-shake {
+          animation: shake 0.4s ease-in-out;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+interface StreamingTextProps {
+  text: string;
+  isComplete: boolean;
+  role: 'user' | 'model';
+}
+
+const StreamingText: React.FC<StreamingTextProps> = ({ text, isComplete, role }) => {
+  const words = useMemo(() => text.trim().split(/\s+/), [text]);
+  
+  if (isComplete || words.length === 0) {
+    return <span>{text}</span>;
+  }
+
+  const recentThreshold = Math.min(words.length, 3);
+  const historicWords = words.slice(0, words.length - recentThreshold);
+  const currentWords = words.slice(words.length - recentThreshold);
+
+  return (
+    <span>
+      <span className="opacity-70">{historicWords.join(' ')}</span>
+      {historicWords.length > 0 && ' '}
+      <span className={`inline-block font-bold relative ${role === 'user' ? 'text-blue-100' : 'text-blue-600'}`}>
+        {currentWords.join(' ')}
+        <span className="absolute -bottom-0.5 left-0 w-full h-0.5 bg-current opacity-30 animate-pulse"></span>
+      </span>
+    </span>
+  );
+};
+
+export default LiveAgent;

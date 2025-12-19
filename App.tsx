@@ -5,10 +5,12 @@ import Hero from './components/Hero';
 import LiveAgent from './components/LiveAgent';
 import MetricsDashboard from './components/MetricsDashboard';
 import Specs from './components/Specs';
+import BootSequence from './components/BootSequence';
 import { AgentPersona, SystemMetrics } from './types';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'info' | 'specs' | 'live'>('info');
+  const [isBooting, setIsBooting] = useState(false);
   const [persona, setPersona] = useState<AgentPersona>(AgentPersona.YULETIDE_CORE);
   const [metrics, setMetrics] = useState<SystemMetrics>({
     vram: 1.2,
@@ -33,15 +35,26 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const handleLaunchCore = () => {
+    setIsBooting(true);
+  };
+
+  const handleBootComplete = () => {
+    setIsBooting(false);
+    setActiveTab('live');
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900">
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Header activeTab={activeTab} setActiveTab={setActiveTab} onLaunch={handleLaunchCore} />
       
+      {isBooting && <BootSequence onComplete={handleBootComplete} />}
+
       <main className="flex-grow pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           {activeTab === 'info' && (
             <div className="space-y-24">
-              <Hero onTryLive={() => setActiveTab('live')} />
+              <Hero onTryLive={handleLaunchCore} />
               <MetricsDashboard metrics={metrics} />
             </div>
           )}
@@ -51,7 +64,7 @@ const App: React.FC = () => {
           )}
           
           {activeTab === 'live' && (
-            <div className="flex flex-col lg:flex-row gap-8 items-start">
+            <div className="flex flex-col lg:flex-row gap-8 items-start animate-in fade-in duration-700">
                <div className="w-full lg:w-2/3">
                   <LiveAgent 
                     persona={persona} 

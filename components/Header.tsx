@@ -4,9 +4,10 @@ import React from 'react';
 interface HeaderProps {
   activeTab: 'info' | 'specs' | 'live';
   setActiveTab: (tab: 'info' | 'specs' | 'live') => void;
+  onLaunch: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
+const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onLaunch }) => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-effect border-b border-gray-200/50">
       <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
@@ -40,8 +41,8 @@ const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
 
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => setActiveTab('live')}
-            className="hidden sm:block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-full text-sm font-medium transition-all shadow-md shadow-blue-200"
+            onClick={onLaunch}
+            className="hidden sm:block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-full text-sm font-medium transition-all shadow-md shadow-blue-200 active:scale-95"
           >
             Launch Core
           </button>
