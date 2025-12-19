@@ -1,0 +1,7 @@
+{
+  "name": "Project YULETIDE Interface",
+  "description": "A premium, minimalist dashboard for Project YULETIDE - the Yet-Unplugged Local Edge-based Tactile Intelligence for Dialogue & Execution. Featuring real-time voice interaction powered by Gemini Live API and hardware performance metrics.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
