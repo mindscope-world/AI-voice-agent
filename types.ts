@@ -23,4 +23,5 @@ export interface PersonaConfig {
   description: string;
   systemInstruction: string;
   accentColor: string;
+  voiceName: string;
 }

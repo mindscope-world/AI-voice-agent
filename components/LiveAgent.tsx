@@ -19,6 +19,8 @@ interface LiveAgentProps {
   metrics: SystemMetrics;
 }
 
+const AVAILABLE_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir'];
+
 // Utility functions for audio encoding/decoding
 function encode(bytes: Uint8Array) {
   let binary = '';
@@ -86,7 +88,11 @@ const LiveAgent: React.FC<LiveAgentProps> = ({ persona, onPersonaChange, metrics
   const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isSynthesizingId, setIsSynthesizingId] = useState<string | null>(null);
   
+  // Track selected voice separately to allow overrides
+  const [selectedVoice, setSelectedVoice] = useState(PERSONAS[persona].voiceName);
+
   const audioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
@@ -97,6 +103,13 @@ const LiveAgent: React.FC<LiveAgentProps> = ({ persona, onPersonaChange, metrics
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const personaConfig = PERSONAS[persona];
+
+  // Sync selected voice when persona changes, unless session is active
+  useEffect(() => {
+    if (!isActive) {
+      setSelectedVoice(PERSONAS[persona].voiceName);
+    }
+  }, [persona, isActive]);
 
   useEffect(() => {
     return () => {
@@ -168,7 +181,7 @@ const LiveAgent: React.FC<LiveAgentProps> = ({ persona, onPersonaChange, metrics
           speechConfig: {
             voiceConfig: { 
               prebuiltVoiceConfig: { 
-                voiceName: persona === AgentPersona.AGENT_SANTA ? 'Puck' : 'Zephyr' 
+                voiceName: selectedVoice
               } 
             },
           },
@@ -263,6 +276,43 @@ const LiveAgent: React.FC<LiveAgentProps> = ({ persona, onPersonaChange, metrics
     }
   };
 
+  const speakTranscriptItem = async (item: TranscriptItem) => {
+    if (isSynthesizingId) return;
+    try {
+      setIsSynthesizingId(item.id);
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: item.text }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: selectedVoice },
+            },
+          },
+        },
+      });
+
+      const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (audioData) {
+        // Use the output context if available, otherwise create a temporary one
+        const ctx = outputAudioContextRef.current || new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        const buffer = await decodeAudioData(decode(audioData), ctx, 24000, 1);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.onended = () => setIsSynthesizingId(null);
+        source.start(0);
+      } else {
+        setIsSynthesizingId(null);
+      }
+    } catch (err) {
+      console.error('TTS Synthesis failed:', err);
+      setIsSynthesizingId(null);
+    }
+  };
+
   const updateTranscript = (role: 'user' | 'model', text: string) => {
     setTranscript(prev => {
       if (prev.length > 0) {
@@ -312,10 +362,29 @@ const LiveAgent: React.FC<LiveAgentProps> = ({ persona, onPersonaChange, metrics
         </div>
         
         <div className="flex items-center gap-3">
+          {/* Voice Selector Dropdown */}
+          <div className="relative group">
+            <select 
+              value={selectedVoice}
+              onChange={(e) => setSelectedVoice(e.target.value)}
+              disabled={isActive || isConnecting}
+              className="appearance-none bg-white border border-gray-200 px-4 py-2 pr-10 rounded-full text-[10px] font-bold text-gray-600 uppercase tracking-widest outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              {AVAILABLE_VOICES.map(v => (
+                <option key={v} value={v}>{v} VOICE</option>
+              ))}
+            </select>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
           {isActive && (
             <div className="flex items-center gap-3 px-4 py-2 bg-blue-50/50 rounded-full border border-blue-100">
               <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-              <span className="text-[10px] font-bold text-blue-600 tracking-wider">LATENCY: {metrics.latency}MS</span>
+              <span className="text-[10px] font-bold text-blue-600 tracking-wider uppercase">Latency: {metrics.latency}ms</span>
             </div>
           )}
           {transcript.length > 0 && (
@@ -384,31 +453,42 @@ const LiveAgent: React.FC<LiveAgentProps> = ({ persona, onPersonaChange, metrics
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-bold uppercase tracking-widest text-gray-500">Secure Edge Bridge</p>
-                  <p className="text-xs text-gray-400 max-w-xs mx-auto italic">Tap the module above to initiate voice dialogue. No data will leave the local environment.</p>
+                  <p className="text-xs text-gray-400 max-w-xs mx-auto italic">Tap the module above to initiate voice dialogue. Current: {selectedVoice} voice synthesis.</p>
                 </div>
               </div>
             ) : (
               transcript.map((item, i) => (
                 <div 
                   key={item.id} 
-                  className={`flex gap-4 ${item.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                  className={`flex gap-4 group/item ${item.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                 >
                   {/* Avatar/Role Indicators */}
-                  <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] shadow-sm transition-transform hover:scale-105 ${
-                    item.role === 'user' ? 'bg-slate-700' : 'bg-gray-800'
+                  <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] shadow-sm transition-transform hover:scale-110 ${
+                    item.role === 'user' ? 'bg-blue-900/80' : 'bg-gray-800'
                   }`} style={item.role === 'model' ? { backgroundColor: personaConfig.accentColor } : {}}>
                     {item.role === 'user' ? 'USR' : 'SYS'}
                   </div>
 
-                  <div className={`flex flex-col max-w-[85%] ${item.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`text-[9px] font-black mb-1.5 tracking-tighter uppercase ${item.role === 'user' ? 'text-slate-500 mr-1' : 'text-gray-400 ml-1'}`}>
+                  <div className={`flex flex-col max-w-[85%] relative ${item.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`text-[9px] font-black mb-1.5 tracking-tighter uppercase flex items-center gap-2 ${item.role === 'user' ? 'text-blue-800/60 mr-1' : 'text-gray-400 ml-1'}`}>
                       {item.role === 'user' ? 'LOCAL TERMINAL' : personaConfig.name}
+                      {item.role === 'model' && item.isComplete && (
+                        <button 
+                          onClick={() => speakTranscriptItem(item)}
+                          disabled={!!isSynthesizingId}
+                          className={`opacity-0 group-hover/item:opacity-100 transition-opacity p-1 rounded-full hover:bg-gray-100 ${isSynthesizingId === item.id ? 'animate-pulse text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
+                        >
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                          </svg>
+                        </button>
+                      )}
                     </div>
                     <div className={`rounded-3xl px-6 py-4 text-sm leading-relaxed shadow-sm transition-all duration-300 ${
                       item.role === 'user' 
-                        ? 'bg-slate-800 text-slate-100 rounded-tr-none border border-slate-700' 
+                        ? 'bg-blue-800/90 text-blue-50 rounded-br-none border border-blue-700/30' 
                         : 'bg-white text-gray-800 rounded-tl-none border border-gray-100 shadow-sm border-l-4'
-                      } ${!item.isComplete ? 'ring-2 ring-opacity-20 ' + (item.role === 'user' ? 'ring-slate-400' : 'ring-gray-300') : ''}`}
+                      } ${!item.isComplete ? 'ring-2 ring-opacity-20 ' + (item.role === 'user' ? 'ring-blue-400' : 'ring-gray-300') : ''}`}
                       style={item.role === 'model' ? { borderLeftColor: personaConfig.accentColor } : {}}
                     >
                       <StreamingText text={item.text} isComplete={item.isComplete} role={item.role} />

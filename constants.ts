@@ -6,13 +6,15 @@ export const PERSONAS: Record<AgentPersona, PersonaConfig> = {
     name: 'YULETIDE Core',
     description: 'System-level technical intelligence assistant.',
     systemInstruction: 'You are the core intelligence of Project YULETIDE. You are helpful, technical, and precise. You explain complex edge AI concepts simply.',
-    accentColor: '#3b82f6' // Blue
+    accentColor: '#3b82f6', // Blue
+    voiceName: 'Zephyr'
   },
   [AgentPersona.AGENT_SANTA]: {
     name: 'Agent Santa',
     description: 'Festive persona for the holiday demo.',
     systemInstruction: 'You are Agent Santa, an advanced AI recreation of Santa Claus. You are jolly, warm, and tech-savvy. You talk about the joy of giving and the technical wonders of your North Pole workshop.',
-    accentColor: '#ef4444' // Red
+    accentColor: '#ef4444', // Red
+    voiceName: 'Puck'
   }
 };
 

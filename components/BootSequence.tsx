@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { GoogleGenAI, Modality } from '@google/genai';
 
 interface BootSequenceProps {
   onComplete: () => void;
@@ -22,21 +23,84 @@ const BOOT_LOGS = [
 const BootSequence: React.FC<BootSequenceProps> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const speakMessage = async (text: string) => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: text }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: 'Zephyr' },
+            },
+          },
+        },
+      });
+
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        }
+        const ctx = audioContextRef.current;
+        const binaryString = atob(base64Audio);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        const dataInt16 = new Int16Array(bytes.buffer);
+        const frameCount = dataInt16.length;
+        const buffer = ctx.createBuffer(1, frameCount, 24000);
+        const channelData = buffer.getChannelData(0);
+        for (let i = 0; i < frameCount; i++) {
+          channelData[i] = dataInt16[i] / 32768.0;
+        }
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+      }
+    } catch (e) {
+      console.error("Boot TTS failed", e);
+    }
+  };
 
   useEffect(() => {
     let logIndex = 0;
+    
+    // Announce start
+    speakMessage("Initializing Yuletide Edge Core.");
+
     const logInterval = setInterval(() => {
       if (logIndex < BOOT_LOGS.length) {
         setLogs(prev => [...prev, BOOT_LOGS[logIndex]]);
         logIndex++;
         setProgress((logIndex / BOOT_LOGS.length) * 100);
+        
+        // Announce midway status
+        if (logIndex === Math.floor(BOOT_LOGS.length / 2)) {
+          speakMessage("Reasoning engines active.");
+        }
       } else {
         clearInterval(logInterval);
-        setTimeout(onComplete, 800);
+        speakMessage("System status nominal. Launching interface.");
+        setTimeout(onComplete, 1200);
       }
-    }, 150);
+    }, 200);
 
-    return () => clearInterval(logInterval);
+    return () => {
+      clearInterval(logInterval);
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
   }, [onComplete]);
 
   return (
@@ -44,7 +108,7 @@ const BootSequence: React.FC<BootSequenceProps> = ({ onComplete }) => {
       <div className="max-w-2xl w-full space-y-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-12">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center animate-pulse">
+          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center animate-pulse shadow-[0_0_20px_rgba(37,99,235,0.4)]">
             <span className="text-white font-bold text-xl">Y</span>
           </div>
           <div>
